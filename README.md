@@ -2,10 +2,11 @@
 
 Chrome extension that sets your own default **printer / material / nozzle /
 nozzle temperature** in [OGcode](https://ogcode.dabi.design/) (Section 5),
-instead of it starting on "Bambu Lab A1" every session. After installing,
-click the toolbar icon once and pick your printer — until then everything is
-left at the app's defaults. The popup matches OGcode's own dark theme
-(DM Sans / JetBrains Mono, same palette).
+instead of it starting on "Bambu Lab A1" every session — plus **print
+profile import/export**. It adds an orange **Utils** button to OGcode's own
+header that opens a native-looking modal (built from the app's own modal
+styles). After installing, open Utils once and pick your printer — until
+then everything is left at the app's defaults.
 
 ## Install (load unpacked)
 
@@ -16,31 +17,37 @@ left at the app's defaults. The popup matches OGcode's own dark theme
 
 ## Usage
 
-- Click the toolbar icon to open the popup:
+- An orange **Utils** button (cog icon) appears in OGcode's own header, next
+  to Help / Load / Save / Reset. It opens a modal — same look and behavior
+  as the app's Help dialog (Esc, backdrop click, or ✕ to close) — containing
+  everything below.
+- **Defaults** section:
   - pick your default printer, material, nozzle, and nozzle temp ("— leave app
     default —" / empty temp skips that setting; out-of-range temps are clamped
     by the app to the valid range for the combo)
   - toggle **auto-apply** on/off
-  - **Apply now** pushes the defaults to an already-open OGcode tab
+  - **Apply now** pushes the defaults into the page immediately
 - Settings sync across your Chrome profile (`chrome.storage.sync`).
-- The popup's printer list is scraped live from the app when an OGcode tab is
-  open (and cached), so new printers the developer adds appear automatically.
+- The printer list is read live from the app's own dropdown every time the
+  modal opens, so new printers the developer adds appear automatically.
+- The toolbar icon no longer opens a popup: clicking it focuses your OGcode
+  tab (or opens one) and pops the Utils modal.
 
 ## Print profile (sections 2–5)
 
-Separate from the defaults above: save and reuse just the **print settings**
-— Pattern, Surface texture, Floor, Printer (OGcode's own sections 2–5) —
-independent of the Shape (section 1), which is unique to each design.
+The second section of the Utils modal: save and reuse just the **print
+settings** — Pattern, Surface texture, Floor, Printer (OGcode's own sections
+2–5) — independent of the Shape (section 1), which is unique to each design.
 
-- **Export current** downloads a `.json` snapshot of the currently open
-  OGcode tab's print settings.
+- **Export current** downloads a `.json` snapshot of the current design's
+  print settings.
 - **Import file…** accepts either one of those exported files, or a full
   project file you saved from OGcode itself (`Save → Project`) — only the
   print-settings keys are read from it, the shape is ignored. A shape-only
   "profile" save (OGcode's own `Save → Profile`) is rejected with a clear
   error, since it has no print settings to import.
-- **Apply imported profile** pushes the loaded file into the active OGcode
-  tab and reports what happened: how many of the file's settings were
+- **Apply imported profile** pushes the loaded file into the page
+  and reports what happened: how many of the file's settings were
   applied, a list of any that couldn't be (e.g. a control the app has since
   renamed or removed), and how many custom-printer fields (build volume,
   start/end G-code) were skipped because the imported printer isn't "Custom".
@@ -83,7 +90,10 @@ updates:
 - fresh load applies defaults (toast appears, Section 5 shows your printer)
 - license gate → unlock → defaults applied on the app page
 - loading a saved project does **not** re-apply defaults
-- popup shows the current printer list and "Apply now" works
+- orange Utils button appears in the header; modal opens and closes like the
+  app's own Help dialog (✕, backdrop click, Esc)
+- modal shows the current printer list and "Apply now" works
+- toolbar icon focuses/opens the OGcode tab and pops the Utils modal
 - export a print profile, re-import it on a fresh design, and confirm
   sections 2–5 match while the shape (section 1) is untouched
 - import a full project file and confirm only sections 2–5 are picked up

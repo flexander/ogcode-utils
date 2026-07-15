@@ -254,8 +254,8 @@ function showToast(text, isError) {
 }
 
 // ---------------------------------------------------------------------------
-// Option scraping — keeps the popup's printer list in sync with the app
-// without hardcoding it, so new printers show up automatically.
+// Option scraping — feeds the Utils modal's selects straight from the live
+// DOM, so new printers the developer adds show up automatically.
 
 function scrapeOptions() {
   const sel = document.getElementById('printerSelect');
@@ -278,11 +278,6 @@ function scrapeOptions() {
     ? { min: tempEl.min, max: tempEl.max, step: tempEl.step, value: tempEl.value }
     : null;
   return { printers, materials, nozzles, nozzleTempRange, scrapedAt: Date.now() };
-}
-
-function cacheOptions() {
-  const options = scrapeOptions();
-  if (options) chrome.storage.local.set({ cachedOptions: options });
 }
 
 function getAppVersion() {
@@ -533,20 +528,6 @@ async function applyProfile(profile) {
   };
 }
 
-function profileReportText(report) {
-  let text = `Print profile: applied ${report.appliedCount}/${report.totalCount} settings`;
-  if (report.versionMismatch) {
-    text += ` — imported from ${report.importedAppVersion}, this app is ${report.currentAppVersion}`;
-  }
-  if (report.failedFields.length) {
-    text += ` — could not apply: ${report.failedFields.join(', ')}`;
-  }
-  if (report.skippedFields.length) {
-    text += ` (${report.skippedFields.length} custom-printer field(s) skipped, printer isn't Custom)`;
-  }
-  return text;
-}
-
 function triggerDownload(filename, jsonObj) {
   const json = JSON.stringify(jsonObj, null, 2);
   const blob = new Blob([json], { type: 'application/json' });
@@ -563,42 +544,17 @@ function triggerDownload(filename, jsonObj) {
 // ---------------------------------------------------------------------------
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg && msg.type === 'apply-now') {
-    (async () => {
-      const settings = await getSettings();
-      const report = await applyDefaults(settings);
-      showToast(toastText(report, settings));
-      sendResponse({ ok: true, report });
-    })();
-    return true; // async response
-  }
-  if (msg && msg.type === 'get-options') {
-    sendResponse({ ok: true, options: scrapeOptions() });
-  }
-  if (msg && msg.type === 'export-profile') {
-    try {
-      const profile = scrapeProfile(msg.name);
-      const safeName = (msg.name || 'ogcode-print-profile').replace(/[^\w.-]+/g, '_');
-      triggerDownload(`${safeName}.json`, profile);
-      sendResponse({ ok: true });
-    } catch (e) {
-      sendResponse({ ok: false, error: String(e) });
-    }
-  }
-  if (msg && msg.type === 'apply-profile') {
-    (async () => {
-      const report = await applyProfile(msg.profile || {});
-      showToast(profileReportText(report), report.failedFields.length > 0);
-      sendResponse({ ok: true, report });
-    })();
-    return true; // async response
+  // Sent by background.js when the toolbar icon is clicked. openUtilsModal
+  // is defined by modal.js (same isolated world, loaded after this script).
+  if (msg && msg.type === 'open-utils-modal') {
+    if (typeof openUtilsModal === 'function') openUtilsModal();
+    sendResponse({ ok: true });
   }
 });
 
 (async function init() {
   const sel = await waitForElement('#printerSelect');
   if (!sel) return; // license gate page, or the app changed its markup
-  cacheOptions();
   const settings = await getSettings();
   if (!settings.enabled) return;
   const report = await applyDefaults(settings);

@@ -5,16 +5,18 @@
   "description": "Set your own default printer, material and nozzle for OGcode (ogcode.dabi.design) instead of starting on Bambu Lab A1 every time.",
   "permissions": ["storage"],
   "host_permissions": ["https://ogcode.dabi.design/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
   "content_scripts": [
     {
       "matches": ["https://ogcode.dabi.design/*"],
-      "js": ["content.js"],
+      "js": ["content.js", "modal.js"],
       "run_at": "document_idle"
     }
   ],
   "action": {
-    "default_popup": "popup.html",
-    "default_title": "OGcode Utils",
+    "default_title": "OGcode Utils — open OGcode",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
