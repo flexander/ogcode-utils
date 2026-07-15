@@ -1,101 +1,86 @@
+<img src="icons/icon128.png" width="64" align="left" alt="OGcode Utils icon">
+
 # OGcode Utils
 
-Chrome extension that sets your own default **printer / material / nozzle /
-nozzle temperature** in [OGcode](https://ogcode.dabi.design/) (Section 5),
-instead of it starting on "Bambu Lab A1" every session — plus **print
-profile import/export**. It adds an orange **Utils** button to OGcode's own
-header that opens a native-looking modal (built from the app's own modal
-styles). After installing, open Utils once and pick your printer — until
-then everything is left at the app's defaults.
+A little Chrome extension that makes [OGcode](https://ogcode.dabi.me/) — the
+G-code generator for beautiful spiral-printed vases and lamps — remember
+*your* setup.
 
-## Install (load unpacked)
+<br clear="left">
 
-1. Open `chrome://extensions`
-2. Enable **Developer mode** (top right)
-3. Click **Load unpacked** and select this folder
-4. Open/reload OGcode — a small orange toast confirms "Defaults applied: …"
+## What it does
 
-## Usage
+**Remembers your printer.** OGcode starts on "Bambu Lab A1" every time you
+open it. If you print on something else, you've probably exported a file at
+least once with the wrong printer selected. This extension picks your
+printer (and material, nozzle, and nozzle temperature if you like)
+automatically every time the page loads. A small orange note in the corner
+confirms it happened.
 
-- An orange **Utils** button (cog icon) appears in OGcode's own header, next
-  to Help / Load / Save / Reset. It opens a modal — same look and behavior
-  as the app's Help dialog (Esc, backdrop click, or ✕ to close) — containing
-  everything below.
-- **Defaults** section:
-  - pick your default printer, material, nozzle, and nozzle temp ("— leave app
-    default —" / empty temp skips that setting; out-of-range temps are clamped
-    by the app to the valid range for the combo)
-  - toggle **auto-apply** on/off
-  - **Apply now** pushes the defaults into the page immediately
-- Settings sync across your Chrome profile (`chrome.storage.sync`).
-- The printer list is read live from the app's own dropdown every time the
-  modal opens, so new printers the developer adds appear automatically.
-- The toolbar icon no longer opens a popup: clicking it focuses your OGcode
-  tab (or opens one) and pops the Utils modal.
+**Saves your print settings.** Ever dialed in the perfect combination of
+pattern, texture, floor, and printer settings — and wished you could use it
+on your next design? You can export those settings to a file and load them
+into any other design later. The shape itself stays untouched, so the same
+"recipe" works on a vase today and a lampshade tomorrow. It can even pull
+the settings out of a full project file you saved from OGcode itself.
 
-## Print profile (sections 2–5)
+## How to install
 
-The second section of the Utils modal: save and reuse just the **print
-settings** — Pattern, Surface texture, Floor, Printer (OGcode's own sections
-2–5) — independent of the Shape (section 1), which is unique to each design.
+The extension isn't in the Chrome Web Store, so it's loaded manually — it
+only takes a minute:
 
-- **Export current** downloads a `.json` snapshot of the current design's
-  print settings.
-- **Import file…** accepts either one of those exported files, or a full
-  project file you saved from OGcode itself (`Save → Project`) — only the
-  print-settings keys are read from it, the shape is ignored. A shape-only
-  "profile" save (OGcode's own `Save → Profile`) is rejected with a clear
-  error, since it has no print settings to import.
-- **Apply imported profile** pushes the loaded file into the page
-  and reports what happened: how many of the file's settings were
-  applied, a list of any that couldn't be (e.g. a control the app has since
-  renamed or removed), and how many custom-printer fields (build volume,
-  start/end G-code) were skipped because the imported printer isn't "Custom".
-  **Import never stops partway through on one bad field** — it always
-  attempts every setting in the file and reports the full outcome at the end,
-  rather than aborting.
-- Every export is stamped with the OGcode app version (read from the
-  version badge in its header) at export time. If you later import it into a
-  different app version, the report flags the mismatch — it still applies
-  everything it can, this is just a heads-up that some fields may not have
-  mapped cleanly if the app changed in between.
-- Known limitations, inherited from OGcode's own project-save format rather
-  than introduced by this extension: the "dip" and "overhang adapt" column
-  sliders aren't saved by OGcode's own project files either, so they don't
-  round-trip here; and the 3D "Live effector" positions are set by dragging
-  in the viewport, so only whether it's enabled and its radius/strength are
-  restored, not the exact drag positions.
+1. Download this project (green **Code** button, then **Download ZIP**) and
+   unzip it somewhere you won't accidentally delete it
+2. In Chrome, open `chrome://extensions`
+3. Turn on **Developer mode** (top-right corner)
+4. Click **Load unpacked** and choose the unzipped folder
+5. Open OGcode — you'll see a new orange **Utils** button in the top bar
 
-## How it works
+Chrome may occasionally ask if you want to keep developer-mode extensions.
+That's normal for manually installed extensions — just keep it enabled.
 
-A content script runs once per page load, waits for `#printerSelect` to exist,
-then drives the app's own UI controls — sets the select and dispatches a real
-`change` event, clicks the material/nozzle buttons — exactly as a human would.
-It verifies the app accepted each value and reports via the toast.
+## How to use it
 
-It deliberately applies **only once per page load**: loading a saved project or
-changing anything by hand afterwards is never overridden. On the license-key
-gate page it does nothing. If the app rejects a value (e.g. nozzle unavailable
-for the combo, or a printer removed from the app), the toast says so and the
-app's default stays.
+Click the orange **Utils** button in OGcode's header (it sits right next to
+Help, Load, Save, and Reset). A window opens with two sections:
 
-If OGcode ever ships native default settings, retire this extension.
+**Defaults** — choose your printer, material, nozzle, and nozzle
+temperature. Anything set to "leave app default" is left alone. From then
+on, every time you open OGcode, your choices are already selected. The
+auto-apply switch turns this on and off, and **Apply now** sets everything
+immediately without reloading.
 
-## Testing
+**Print profile** — **Export current** saves your design's print settings
+(everything except the shape) as a file. **Import file** loads one back —
+either a file you exported here, or a full project file saved from OGcode
+itself. **Apply imported profile** then sets everything in one go and tells
+you exactly what was applied.
 
-DOM-level tests run the content script against a saved copy of the real app
-page in jsdom (see `PLAN.md` for design notes). Manual checklist after app
-updates:
+You can also click the extension's icon in Chrome's toolbar at any time —
+it jumps to your OGcode tab (or opens one) and brings up the Utils window.
 
-- fresh load applies defaults (toast appears, Section 5 shows your printer)
-- license gate → unlock → defaults applied on the app page
-- loading a saved project does **not** re-apply defaults
-- orange Utils button appears in the header; modal opens and closes like the
-  app's own Help dialog (✕, backdrop click, Esc)
-- modal shows the current printer list and "Apply now" works
-- toolbar icon focuses/opens the OGcode tab and pops the Utils modal
-- export a print profile, re-import it on a fresh design, and confirm
-  sections 2–5 match while the shape (section 1) is untouched
-- import a full project file and confirm only sections 2–5 are picked up
-- import a shape-only "profile" file and confirm it's rejected with a clear
-  error rather than silently applying nothing
+## Good to know
+
+- Your saved choices are never forced on you: they're applied once when the
+  page loads, so loading a saved project or changing things by hand always
+  wins.
+- Settings follow your Chrome profile, so they come along if you use Chrome
+  on another computer.
+- If OGcode adds new printers, they show up in the Utils window
+  automatically — no update needed.
+- Each exported settings file remembers which OGcode version it came from.
+  If you import it into a newer version of the app, you'll get a friendly
+  heads-up in case something didn't carry over — whatever can be applied
+  still is.
+- Two things can't round-trip because OGcode's own save files don't include
+  them: the "dip" and "overhang adapt" column sliders, and the exact
+  positions of the draggable 3D effectors (whether they're enabled, and
+  their range and strength, do carry over).
+- If the OGcode developer ever builds these features into the app itself,
+  this extension can happily retire.
+
+## Questions or problems
+
+Found a bug or have an idea? Open an issue here on GitHub. For OGcode
+itself, visit [ogcode.dabi.me](https://ogcode.dabi.me/) or the OGcode
+Discord.
