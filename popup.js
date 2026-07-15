@@ -141,6 +141,103 @@ async function applyNow() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Print profile (sections 2-5) — import/export, separate from the defaults
+// above. Accepts either our own standalone export or a full project/profile
+// save (only the print-settings keys are used from the latter).
+
+const PROFILE_KEYS = ['pattern', 'stitches', 'surfaceMode', 'blobs', 'arches', 'waves', 'floor', 'printer'];
+
+let importedProfile = null;
+
+function extractProfile(parsed) {
+  if (!parsed || typeof parsed !== 'object') {
+    throw new Error('Not an OGcode file.');
+  }
+  if (parsed.format !== 'ogcode-print-profile' && parsed.format !== 'ogcode') {
+    throw new Error('Not an OGcode file.');
+  }
+  const found = PROFILE_KEYS.filter((k) => parsed[k] !== undefined);
+  if (!found.length) {
+    throw new Error('This file has no print-profile sections (Pattern / Surface / Floor / Printer) '
+      + '— likely a shape-only save.');
+  }
+  const profile = { appVersion: parsed.appVersion || null };
+  for (const k of found) profile[k] = parsed[k];
+  return { profile, found };
+}
+
+function setProfileStatus(text, isError) {
+  const el = $('profileStatus');
+  el.textContent = text || '';
+  el.className = isError ? 'err' : '';
+}
+
+async function exportProfile() {
+  const tab = await findOgcodeTab();
+  if (!tab) {
+    setProfileStatus('No OGcode tab open.', true);
+    return;
+  }
+  try {
+    const res = await chrome.tabs.sendMessage(tab.id, { type: 'export-profile' });
+    setProfileStatus(res && res.ok ? 'Exported — check your downloads.' : `Export failed: ${res?.error || 'unknown error'}`,
+      !(res && res.ok));
+  } catch (e) {
+    setProfileStatus('OGcode tab not ready (license screen?). Reload it and retry.', true);
+  }
+}
+
+async function handleFileChosen(file) {
+  if (!file) return;
+  $('importLabel').classList.remove('has-file');
+  $('applyProfile').disabled = true;
+  importedProfile = null;
+  try {
+    const text = await file.text();
+    const parsed = JSON.parse(text);
+    const { profile, found } = extractProfile(parsed);
+    importedProfile = profile;
+    $('importLabel').textContent = file.name;
+    $('importLabel').classList.add('has-file');
+    $('applyProfile').disabled = false;
+    setProfileStatus(`Loaded: ${found.join(', ')}`);
+  } catch (e) {
+    $('importLabel').textContent = 'Import file…';
+    setProfileStatus(e.message || 'Could not read that file.', true);
+  }
+}
+
+async function applyImportedProfile() {
+  if (!importedProfile) return;
+  const tab = await findOgcodeTab();
+  if (!tab) {
+    setProfileStatus('No OGcode tab open.', true);
+    return;
+  }
+  try {
+    const res = await chrome.tabs.sendMessage(tab.id, { type: 'apply-profile', profile: importedProfile });
+    const report = res && res.report;
+    if (!report) {
+      setProfileStatus('Apply failed: no response from the page.', true);
+      return;
+    }
+    const lines = [`Applied ${report.appliedCount}/${report.totalCount} settings.`];
+    if (report.versionMismatch) {
+      lines.push(`Imported from ${report.importedAppVersion}, this app is ${report.currentAppVersion}.`);
+    }
+    if (report.failedFields.length) {
+      lines.push(`Could not apply: ${report.failedFields.join(', ')}`);
+    }
+    if (report.skippedFields.length) {
+      lines.push(`${report.skippedFields.length} custom-printer field(s) skipped (printer isn't Custom).`);
+    }
+    setProfileStatus(lines.join('\n'), report.failedFields.length > 0);
+  } catch (e) {
+    setProfileStatus('OGcode tab not ready (license screen?). Reload it and retry.', true);
+  }
+}
+
 (async function init() {
   const settings = await chrome.storage.sync.get(SETTINGS_DEFAULTS);
   const { options, source } = await loadOptions();
@@ -165,4 +262,8 @@ async function applyNow() {
     $(id).addEventListener('change', saveSettings);
   }
   $('applyNow').addEventListener('click', applyNow);
+
+  $('exportProfile').addEventListener('click', exportProfile);
+  $('profileFile').addEventListener('change', (e) => handleFileChosen(e.target.files[0]));
+  $('applyProfile').addEventListener('click', applyImportedProfile);
 })();
