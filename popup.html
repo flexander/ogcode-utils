@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* Palette lifted from ogcode.dabi.design's own :root */
+  :root {
+    --bg: #0a0a0a;
+    --surface: #141414;
+    --surface-2: #1c1c1c;
+    --border: #2a2a2a;
+    --border-strong: #3b3b3b;
+    --text: #e8e8eb;
+    --text-2: #9a9aa3;
+    --text-3: #5a5a62;
+    --accent: #f45612;
+    --accent-hover: #ff7038;
+    --danger: #ef4444;
+    --font-sans: "DM Sans", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body {
+    width:280px; padding:14px;
+    font:400 13px/1.5 var(--font-sans);
+    background:var(--bg); color:var(--text);
+    -webkit-font-smoothing:antialiased;
+  }
+  h1 {
+    font-size:13px; font-weight:600; letter-spacing:-.01em;
+    margin-bottom:12px; display:flex; align-items:center; justify-content:space-between;
+  }
+  .toggle { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:400;
+            color:var(--text-2); font-family:var(--font-mono); }
+  .toggle input { accent-color:var(--accent); }
+  label.field { display:block; margin-bottom:10px; }
+  .field span.lbl {
+    display:block; font-family:var(--font-mono); font-size:10px; font-weight:500;
+    color:var(--text-3); margin-bottom:4px; text-transform:uppercase; letter-spacing:.08em;
+  }
+  select, input[type=number] {
+    width:100%; padding:7px 9px; font-size:13px; font-family:var(--font-sans);
+    background:var(--surface); color:var(--text);
+    border:1px solid var(--border); border-radius:6px;
+  }
+  input[type=number] { font-family:var(--font-mono); }
+  select:hover, input[type=number]:hover { border-color:var(--border-strong); }
+  select:focus, input[type=number]:focus { outline:none; border-color:var(--accent); }
+  select option, select optgroup { background:var(--surface-2); }
+  #tempHint { font-family:var(--font-mono); font-size:10px; color:var(--text-3); margin-top:3px; display:block; }
+  button {
+    width:100%; padding:8px; margin-top:2px; font-size:13px; font-weight:600;
+    font-family:var(--font-sans); border:0; border-radius:6px;
+    background:var(--accent); color:#fff; cursor:pointer;
+  }
+  button:hover { background:var(--accent-hover); }
+  button:disabled { background:var(--surface-2); color:var(--text-3); cursor:default; }
+  #status { font-family:var(--font-mono); font-size:10px; color:var(--text-2);
+            margin-top:8px; min-height:14px; line-height:1.4; }
+  #status.err { color:var(--danger); }
+</style>
+</head>
+<body>
+  <h1>OGcode Utils
+    <label class="toggle"><input type="checkbox" id="enabled"> auto-apply</label>
+  </h1>
+  <label class="field"><span class="lbl">Printer</span>
+    <select id="printer"></select>
+  </label>
+  <label class="field"><span class="lbl">Material</span>
+    <select id="material"></select>
+  </label>
+  <label class="field"><span class="lbl">Nozzle</span>
+    <select id="nozzle"></select>
+  </label>
+  <label class="field"><span class="lbl">Nozzle temp °C</span>
+    <input type="number" id="nozzleTemp" min="150" max="350" step="5" placeholder="leave app default">
+    <span id="tempHint"></span>
+  </label>
+  <button id="applyNow">Apply now</button>
+  <p id="status"></p>
+  <script src="popup.js"></script>
+</body>
+</html>
