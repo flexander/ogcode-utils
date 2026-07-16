@@ -1,14 +1,16 @@
 // OGcode Utils — content script.
-// Two features, both driven by simulating real UI events on the app's own
+// Shared helpers driven by simulating real UI events on the app's own
 // controls (never touching its internal JS state directly, since it's all
 // private to an inline <script type="module"> with nothing exposed on
-// window):
+// window). Used by three features (the last two implemented in modal.js):
 //   1. Defaults: applies the user's saved printer/material/nozzle/temp once
 //      per page load. Never re-applies afterwards, so loading a saved
 //      project or changing things by hand is never overridden.
 //   2. Print profile import/export: sections 2-5 (Pattern, Surface texture,
 //      Floor, Printer) as a standalone file, independent of the Shape
 //      (section 1), so print settings can be reused across designs.
+//   3. Export bundle: a zip of preview images alongside the app's own real
+//      project-save and G-code downloads.
 
 const POLL_MS = 200;
 const POLL_TIMEOUT_MS = 8000;
@@ -528,9 +530,7 @@ async function applyProfile(profile) {
   };
 }
 
-function triggerDownload(filename, jsonObj) {
-  const json = JSON.stringify(jsonObj, null, 2);
-  const blob = new Blob([json], { type: 'application/json' });
+function triggerBlobDownload(filename, blob) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -539,6 +539,22 @@ function triggerDownload(filename, jsonObj) {
   a.click();
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+function triggerDownload(filename, jsonObj) {
+  const json = JSON.stringify(jsonObj, null, 2);
+  triggerBlobDownload(filename, new Blob([json], { type: 'application/json' }));
+}
+
+// Converts a canvas.toDataURL('image/png') string into raw bytes, for
+// bundling captured view screenshots into a zip (see the Export bundle
+// feature in modal.js).
+function dataUrlToUint8Array(dataUrl) {
+  const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
 }
 
 // ---------------------------------------------------------------------------

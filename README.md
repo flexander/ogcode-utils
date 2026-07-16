@@ -4,7 +4,7 @@
 
 A little Chrome extension that makes [OGcode](https://ogcode.dabi.me/) — the
 G-code generator for beautiful spiral-printed vases and lamps — remember
-*your* setup.
+*your* setup, and makes finishing up a design a one-click affair.
 
 <br clear="left">
 
@@ -23,6 +23,13 @@ on your next design? You can export those settings to a file and load them
 into any other design later. The shape itself stays untouched, so the same
 "recipe" works on a vase today and a lampshade tomorrow. It can even pull
 the settings out of a full project file you saved from OGcode itself.
+
+**Wraps up a finished design in one click.** Once you're happy with a
+design, hit "Download bundle" and you'll get a zip of nice preview
+pictures — the Body, Toolpath, and (when available) Preview views — all
+automatically angled to a good 3D-looking shot, plus your project file and
+G-code downloaded right alongside it. No more fiddling with the 3D view to
+get a screenshot that actually looks good.
 
 ## How to install
 
@@ -56,6 +63,13 @@ either a file you exported here, or a full project file saved from OGcode
 itself. **Apply imported profile** then sets everything in one go and tells
 you exactly what was applied.
 
+**Export bundle** — **Download bundle** gives your finished design a proper
+send-off: it briefly tilts the 3D view to a good angle, takes a picture of
+each available view (Body, Toolpath, Preview), zips them up, and downloads
+that zip together with OGcode's own project-save file and G-code — all in
+one click, all named with the same date and time so they're easy to find
+together in your Downloads folder afterwards.
+
 You can also click the extension's icon in Chrome's toolbar at any time —
 it jumps to your OGcode tab (or opens one) and brings up the Utils window.
 
@@ -76,6 +90,18 @@ it jumps to your OGcode tab (or opens one) and brings up the Utils window.
   them: the "dip" and "overhang adapt" column sliders, and the exact
   positions of the draggable 3D effectors (whether they're enabled, and
   their range and strength, do carry over).
+- The bundle's project file and G-code are OGcode's own real downloads —
+  not something this extension reconstructs — so they land as separate
+  files next to the zip rather than inside it. That's a deliberate choice:
+  a browser extension genuinely can't read back the bytes of a file another
+  script just downloaded, so rather than faking an approximation, we let
+  OGcode generate the real thing.
+- The bundle only straightens up the 3D view's *tilt* (so you can see both
+  the side and the top), not its left-right rotation — and that tilt stays
+  changed after the export finishes, since there's no way to remember what
+  angle you had before. If a view mode isn't available for your current
+  design (like Preview with the Mesh surface texture), it's simply left out
+  of the zip and the summary tells you why.
 - If the OGcode developer ever builds these features into the app itself,
   this extension can happily retire.
 

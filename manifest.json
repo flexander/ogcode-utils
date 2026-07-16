@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "OGcode Utils",
   "version": "1.0.0",
-  "description": "Set your own default printer, material and nozzle for OGcode (ogcode.dabi.design) instead of starting on Bambu Lab A1 every time.",
+  "description": "Default printer/material/nozzle setup, print profile import/export, and one-click export bundles for OGcode (ogcode.dabi.me).",
   "permissions": ["storage"],
   "host_permissions": ["https://ogcode.dabi.design/*"],
   "background": {
@@ -11,7 +11,7 @@
   "content_scripts": [
     {
       "matches": ["https://ogcode.dabi.design/*"],
-      "js": ["content.js", "modal.js"],
+      "js": ["content.js", "zip.js", "modal.js"],
       "run_at": "document_idle"
     }
   ],

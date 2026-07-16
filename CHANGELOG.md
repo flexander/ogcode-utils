@@ -7,6 +7,13 @@ and this project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.ht
 
 ## [Unreleased]
 
+### Added
+
+- **Export bundle.** One click zips up Body, Toolpath, and Preview images of
+  the current design — automatically angled for a good 3D view — and also
+  triggers OGcode's own Save (Full project) and Download .gcode, so those
+  land alongside the zip with matching filenames.
+
 ## [1.0.0] - 2026-07-16
 
 First public release.

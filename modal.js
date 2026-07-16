@@ -1,7 +1,8 @@
-// OGcode Utils — in-page UI. Runs after content.js in the same isolated
-// world, so it calls its helpers (applyDefaults, scrapeProfile,
-// applyProfile, scrapeOptions, getSettings, triggerDownload, showToast,
-// waitForElement, ...) directly.
+// OGcode Utils — in-page UI. Runs after content.js and zip.js in the same
+// isolated world, so it calls their helpers (applyDefaults, scrapeProfile,
+// applyProfile, scrapeOptions, getSettings, triggerDownload,
+// triggerBlobDownload, dataUrlToUint8Array, showToast, waitForElement,
+// sleep, buildZip, ...) directly.
 //
 // Injects an orange "Utils" button into the app's header (drawn in the
 // app's own .btn.btn-ghost style) and a modal built from the app's own
@@ -89,6 +90,17 @@ const OGU_MODAL_HTML = `
       </div>
       <button class="btn btn-primary ogu-w100" id="oguApplyProfile" disabled>Apply imported profile</button>
       <p class="ogu-status" id="oguProfileStatus"></p>
+    </section>
+    <section class="help-section">
+      <div class="help-section-title">Export bundle</div>
+      <p class="ogu-hint" style="margin-bottom:8px">
+        Zips Body / Toolpath / Preview images of the current design (angled
+        automatically for a good 3D view), and also triggers OGcode's own
+        Save (Full project) and Download .gcode — those two land as their
+        own files alongside the zip.
+      </p>
+      <button class="btn btn-primary ogu-w100" id="oguExportBundleBtn">Download bundle</button>
+      <p class="ogu-status" id="oguBundleStatus"></p>
     </section>
   </div>
 </div>`;
@@ -224,6 +236,225 @@ async function oguApplyImportedProfile() {
 }
 
 // --------------------------------------------------------------------------
+// Export bundle: a zip of preview images (angled automatically) plus the
+// app's own real Save-project and Download-gcode actions.
+//
+// The project save and G-code are generated entirely inside the app's own
+// module scope and downloaded immediately as a Blob with no DOM trace — an
+// isolated-world content script cannot intercept another world's Blob/URL
+// calls, so we cannot read those bytes back into our zip. Instead we
+// trigger the app's own real buttons for those two (genuine, full-fidelity
+// files) and zip only what we can actually produce ourselves: the images.
+// See PLAN.md for the full reasoning and the OrbitControls math below.
+
+// Matches controls.rotateSpeed as configured by the app (verified against
+// the exact pinned three.js OrbitControls source for this app's version —
+// see PLAN.md). Only affects the *precision* of the second drag step below;
+// if the app ever changes this, the resulting tilt is merely less exact,
+// never degenerate (see oguNormalizeCameraAngle).
+const OGU_ROTATE_SPEED = 0.9;
+// Target elevation: 60° from vertical (phi) = 30° above the horizon — the
+// same angle the app's own STL-import thumbnail renderer already uses.
+const OGU_TARGET_PHI = Math.PI / 3;
+
+const OGU_VIEW_MODES = [
+  { id: 'modeBtnSmooth', name: 'body' },
+  { id: 'modeBtnDepth', name: 'toolpath' },
+  { id: 'modeBtnVolume', name: 'preview' },
+];
+
+function oguNextFrame() {
+  return new Promise((resolve) => requestAnimationFrame(resolve));
+}
+
+// Dispatches a synthetic drag gesture on the 3D viewport canvas. OrbitControls
+// attaches all of its pointer listeners directly on the canvas element (not
+// window/document — verified against the pinned source), so this reaches it
+// with no ambiguity. Purely vertical (constant clientX) so azimuth (left/right
+// rotation) is never touched — only elevation.
+function oguDispatchVerticalDrag(canvas, deltaY) {
+  const rect = canvas.getBoundingClientRect();
+  const cx = rect.left + rect.width / 2;
+  const cy = rect.top + rect.height / 2;
+  const pointerId = 90210; // arbitrary fixed id for this synthetic gesture
+  const base = { bubbles: true, cancelable: true, pointerId, pointerType: 'mouse', isPrimary: true };
+  canvas.dispatchEvent(new PointerEvent('pointerdown', { ...base, clientX: cx, clientY: cy, button: 0, buttons: 1 }));
+  canvas.dispatchEvent(new PointerEvent('pointermove', { ...base, clientX: cx, clientY: cy + deltaY, button: 0, buttons: 1 }));
+  canvas.dispatchEvent(new PointerEvent('pointerup', { ...base, clientX: cx, clientY: cy + deltaY, button: 0, buttons: 0 }));
+}
+
+// Two-step, fully deterministic angle reset that needs zero knowledge of the
+// camera's current position (which we can't read — camera/controls are
+// private to the app's module):
+//   1. A huge downward drag clamps the polar angle to its lower bound (0,
+//      the library default, unmodified by the app) — "straight down from
+//      above", regardless of where it started.
+//   2. A small, precisely computed upward drag moves it from that known 0
+//      to our target elevation.
+// If this throws for any reason, the caller treats it as best-effort and
+// continues capturing at whatever angle already exists.
+async function oguNormalizeCameraAngle() {
+  const canvas = document.getElementById('viewportCanvas');
+  if (!canvas) return false;
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.height) return false;
+
+  oguDispatchVerticalDrag(canvas, rect.height * 20); // huge drag down -> clamps to phi = 0
+  await sleep(50);
+
+  const deltaY = -(OGU_TARGET_PHI * rect.height) / (2 * Math.PI * OGU_ROTATE_SPEED); // drag up -> phi: 0 -> target
+  oguDispatchVerticalDrag(canvas, deltaY);
+  await sleep(1500); // let the app's damped orbit controls settle visually
+
+  return true;
+}
+
+function oguCaptureCanvas() {
+  const canvas = document.getElementById('viewportCanvas');
+  if (!canvas) return Promise.resolve(null);
+  // Deferred to our own rAF: the app's render loop runs continuously via its
+  // own requestAnimationFrame, so our callback (queued after theirs in the
+  // same tick) sees that frame's freshly drawn pixels before the browser can
+  // clear the (non-preserved) WebGL buffer. See PLAN.md.
+  return new Promise((resolve) => {
+    requestAnimationFrame(() => {
+      try {
+        resolve(canvas.toDataURL('image/png'));
+      } catch (e) {
+        resolve(null);
+      }
+    });
+  });
+}
+
+function oguModeButtonAvailable(btn) {
+  return !!btn && !btn.disabled && !btn.classList.contains('disabled');
+}
+
+// Switches through Body / Toolpath / Preview (whichever are available),
+// capturing each, then restores whatever view the user had before we
+// started. Camera *elevation* is left as oguNormalizeCameraAngle set it —
+// there is no way to read/restore the user's exact prior angle.
+async function oguCaptureViewImages() {
+  const images = [];
+  const skipped = [];
+  const originalBtn = document.querySelector('.mode-btn.active');
+
+  for (const { id, name } of OGU_VIEW_MODES) {
+    const btn = document.getElementById(id);
+    if (!btn) {
+      skipped.push({ name, reason: 'control not found' });
+      continue;
+    }
+    if (!oguModeButtonAvailable(btn)) {
+      skipped.push({ name, reason: 'not available in the current mode' });
+      continue;
+    }
+    btn.click();
+    await oguNextFrame();
+    await oguNextFrame();
+    const dataUrl = await oguCaptureCanvas();
+    if (!dataUrl) {
+      skipped.push({ name, reason: 'could not capture image' });
+      continue;
+    }
+    images.push({ name, dataUrl });
+  }
+
+  if (originalBtn && oguModeButtonAvailable(originalBtn)) originalBtn.click();
+  return { images, skipped };
+}
+
+// Replicates: click Save -> name the file -> ensure "Full project" is
+// selected (it's the default, but a user may have left it on "Profile
+// only") -> click "Download as file". The app's own modal self-closes
+// ~700ms after that click; we don't need to close it ourselves.
+async function oguTriggerSaveProject(namePrefix) {
+  const saveBtn = document.getElementById('saveBtn');
+  const saveToFileBtn = document.getElementById('saveToFileBtn');
+  if (!saveBtn || !saveToFileBtn) return 'not-found';
+
+  saveBtn.click();
+  await sleep(80); // modal's own name-field focus is on a 50ms setTimeout
+
+  const nameInput = document.getElementById('saveNameInput');
+  if (nameInput) nameInput.value = namePrefix;
+
+  const projectRadio = document.querySelector('input[name="saveType"][value="project"]');
+  if (projectRadio && !projectRadio.checked) {
+    projectRadio.checked = true;
+    projectRadio.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+
+  if (saveToFileBtn.disabled) return 'unavailable';
+  saveToFileBtn.click();
+  return 'applied';
+}
+
+function oguTriggerGcodeDownload() {
+  const btn = document.getElementById('downloadBtn');
+  if (!btn) return 'not-found';
+  if (btn.disabled) return 'unavailable';
+  btn.click();
+  return 'applied';
+}
+
+// Mirrors the app's own buildExportDateTime() format ("YYYY-MM-DD HH-MM-SS")
+// so our files sort and group together with the app's own downloads.
+function oguBuildTimestampPrefix() {
+  const pad = (n) => String(n).padStart(2, '0');
+  const d = new Date();
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} `
+    + `${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`;
+}
+
+async function oguExportBundle() {
+  const btn = $ogu('oguExportBundleBtn');
+  btn.disabled = true;
+  oguSetStatus('oguBundleStatus', 'Angling the view…');
+  try {
+    const prefix = oguBuildTimestampPrefix();
+    await oguNormalizeCameraAngle();
+
+    oguSetStatus('oguBundleStatus', 'Capturing images…');
+    const { images, skipped } = await oguCaptureViewImages();
+
+    const lines = [];
+    if (images.length) {
+      const entries = images.map((img) => ({
+        name: `${img.name}.png`,
+        data: dataUrlToUint8Array(img.dataUrl),
+      }));
+      triggerBlobDownload(`${prefix} images.zip`, buildZip(entries));
+      lines.push(`Zipped ${images.length} image(s): ${images.map((i) => i.name).join(', ')}.`);
+    } else {
+      lines.push('No images could be captured.');
+    }
+    for (const s of skipped) lines.push(`Skipped ${s.name}: ${s.reason}.`);
+
+    const saveResult = await oguTriggerSaveProject(prefix);
+    lines.push(
+      saveResult === 'applied' ? 'Project file saved (see Downloads).'
+        : saveResult === 'unavailable' ? 'Project save is unavailable right now.'
+        : 'Could not find the Save button.'
+    );
+
+    const gcodeResult = oguTriggerGcodeDownload();
+    lines.push(
+      gcodeResult === 'applied' ? 'G-code downloaded.'
+        : gcodeResult === 'unavailable' ? 'G-code download is unavailable right now (check build volume / profile).'
+        : 'Could not find the Download .gcode button.'
+    );
+
+    oguSetStatus('oguBundleStatus', lines.join('\n'), skipped.length > 0 || !images.length);
+  } catch (e) {
+    oguSetStatus('oguBundleStatus', `Export failed: ${e.message || e}`, true);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// --------------------------------------------------------------------------
 // Modal open/close — mirrors the app's own initHelpModal() behavior.
 
 function openUtilsModal() {
@@ -262,6 +493,11 @@ async function refreshModalForm() {
   if (!settings.printer && !settings.material && !settings.nozzle && !settings.nozzleTemp) {
     oguSetStatus('oguStatus', 'Pick your printer to get started — it will be preselected on every OGcode load.');
   }
+
+  // #downloadBtn reflects whether the app currently has a valid, exportable
+  // model (build volume ok, profile drawn) — reuse that as our own signal.
+  const downloadBtn = document.getElementById('downloadBtn');
+  $ogu('oguExportBundleBtn').disabled = downloadBtn ? downloadBtn.disabled : true;
 }
 
 // --------------------------------------------------------------------------
@@ -314,6 +550,7 @@ function injectUtilsUI() {
   $ogu('oguExport').addEventListener('click', oguExportProfile);
   $ogu('oguFile').addEventListener('change', (e) => oguHandleFileChosen(e.target.files[0]));
   $ogu('oguApplyProfile').addEventListener('click', oguApplyImportedProfile);
+  $ogu('oguExportBundleBtn').addEventListener('click', oguExportBundle);
 }
 
 (async function initModal() {
